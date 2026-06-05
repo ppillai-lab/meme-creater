@@ -517,6 +517,27 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
           setSelectedId(prevSelected)
         }, 50)
       },
+      copyToClipboard(): Promise<boolean> {
+        const canvas = canvasRef.current
+        if (!canvas) return Promise.resolve(false)
+        const prevSelected = selectedId
+        setSelectedId(null)
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            canvas.toBlob(async (blob) => {
+              if (!blob) { setSelectedId(prevSelected); resolve(false); return }
+              try {
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                resolve(true)
+              } catch {
+                resolve(false)
+              } finally {
+                setSelectedId(prevSelected)
+              }
+            }, 'image/png', 1.0)
+          }, 50)
+        })
+      },
     }))
 
     return (

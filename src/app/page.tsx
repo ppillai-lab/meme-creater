@@ -18,7 +18,16 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'characters' | 'templates' | 'ai'>('characters')
   const [topic, setTopic] = useState('')
   const [trendingContext, setTrendingContext] = useState<TrendingTopicContext | null>(null)
-  const canvasRef = useRef<{ download: () => void }>(null)
+  const canvasRef = useRef<{ download: () => void; copyToClipboard: () => Promise<boolean> }>(null)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    const ok = await canvasRef.current?.copyToClipboard()
+    if (ok) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   const addSticker = (characterId: string) => {
     const isSpeechTemplate = selectedTemplate.layout === 'speech'
@@ -171,6 +180,16 @@ export default function Home() {
               className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all text-sm"
             >
               ⬇ Download Meme
+            </button>
+            <button
+              onClick={handleCopy}
+              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                copied
+                  ? 'bg-green-600 text-white'
+                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {copied ? '✓ Copied!' : '📋 Copy Image'}
             </button>
             <button
               onClick={() => {
