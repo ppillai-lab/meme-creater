@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import MemeCanvas from '@/components/MemeCanvas'
 import CharacterPanel from '@/components/CharacterPanel'
 import TemplatePanel from '@/components/TemplatePanel'
@@ -20,6 +20,66 @@ export default function Home() {
   const [trendingContext, setTrendingContext] = useState<TrendingTopicContext | null>(null)
   const canvasRef = useRef<{ download: () => void; copyToClipboard: () => Promise<boolean> }>(null)
   const [copied, setCopied] = useState(false)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  // History stored in refs to avoid re-render cost on every push
+  type HistoryEntry = { stickers: StickerElement[]; topCaption: string; bottomCaption: string }
+  const historyRef = useRef<HistoryEntry[]>([{ stickers: [], topCaption: 'WHEN THE GOVERNMENT SAYS', bottomCaption: '"ACHHE DIN" INCOMING...' }])
+  const historyIndexRef = useRef(0)
+  // Current live values via refs so debounced callbacks stay fresh
+  const stickersRef = useRef(stickers)
+  const topCaptionRef = useRef(topCaption)
+  const bottomCaptionRef = useRef(bottomCaption)
+  useEffect(() => { stickersRef.current = stickers }, [stickers])
+  useEffect(() => { topCaptionRef.current = topCaption }, [topCaption])
+  useEffect(() => { bottomCaptionRef.current = bottomCaption }, [bottomCaption])
+
+  const captionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const syncHistoryState = () => {
+    setCanUndo(historyIndexRef.current > 0)
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1)
+  }
+
+  const pushHistory = useCallback((entry: HistoryEntry) => {
+    const sliced = historyRef.current.slice(0, historyIndexRef.current + 1)
+    historyRef.current = [...sliced, entry].slice(-50)
+    historyIndexRef.current = historyRef.current.length - 1
+    syncHistoryState()
+  }, [])
+
+  const undo = useCallback(() => {
+    if (captionDebounceRef.current) clearTimeout(captionDebounceRef.current)
+    if (historyIndexRef.current <= 0) return
+    historyIndexRef.current--
+    const e = historyRef.current[historyIndexRef.current]
+    setStickers(e.stickers)
+    setTopCaption(e.topCaption)
+    setBottomCaption(e.bottomCaption)
+    syncHistoryState()
+  }, [])
+
+  const redo = useCallback(() => {
+    if (captionDebounceRef.current) clearTimeout(captionDebounceRef.current)
+    if (historyIndexRef.current >= historyRef.current.length - 1) return
+    historyIndexRef.current++
+    const e = historyRef.current[historyIndexRef.current]
+    setStickers(e.stickers)
+    setTopCaption(e.topCaption)
+    setBottomCaption(e.bottomCaption)
+    syncHistoryState()
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo, redo])
 
   const handleCopy = async () => {
     const ok = await canvasRef.current?.copyToClipboard()
@@ -27,6 +87,22 @@ export default function Home() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
+  }
+
+  const handleTopCaptionChange = (value: string) => {
+    setTopCaption(value)
+    if (captionDebounceRef.current) clearTimeout(captionDebounceRef.current)
+    captionDebounceRef.current = setTimeout(() => {
+      pushHistory({ stickers: stickersRef.current, topCaption: value, bottomCaption: bottomCaptionRef.current })
+    }, 600)
+  }
+
+  const handleBottomCaptionChange = (value: string) => {
+    setBottomCaption(value)
+    if (captionDebounceRef.current) clearTimeout(captionDebounceRef.current)
+    captionDebounceRef.current = setTimeout(() => {
+      pushHistory({ stickers: stickersRef.current, topCaption: topCaptionRef.current, bottomCaption: value })
+    }, 600)
   }
 
   const addSticker = (characterId: string) => {
@@ -39,16 +115,25 @@ export default function Home() {
       size: 100,
       flipX: false,
     }
-    setStickers((prev) => [...prev, newSticker])
+    const next = [...stickersRef.current, newSticker]
+    setStickers(next)
+    pushHistory({ stickers: next, topCaption: topCaptionRef.current, bottomCaption: bottomCaptionRef.current })
   }
 
   const removeSticker = (id: string) => {
-    setStickers((prev) => prev.filter((s) => s.id !== id))
+    const next = stickersRef.current.filter((s) => s.id !== id)
+    setStickers(next)
+    pushHistory({ stickers: next, topCaption: topCaptionRef.current, bottomCaption: bottomCaptionRef.current })
   }
 
   const applyCaption = (top: string, bottom: string) => {
     setTopCaption(top)
     setBottomCaption(bottom)
+    pushHistory({ stickers: stickersRef.current, topCaption: top, bottomCaption: bottom })
+  }
+
+  const handleStickerActionComplete = (finalStickers: StickerElement[]) => {
+    pushHistory({ stickers: finalStickers, topCaption: topCaptionRef.current, bottomCaption: bottomCaptionRef.current })
   }
 
   const handleSelectTrend = (trend: TrendingTopic) => {
@@ -145,7 +230,7 @@ export default function Home() {
                 <input
                   type="text"
                   value={topCaption}
-                  onChange={(e) => setTopCaption(e.target.value)}
+                  onChange={(e) => handleTopCaptionChange(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 font-bold uppercase"
                   placeholder={isSpeech ? 'What are they saying?' : 'TOP TEXT'}
                 />
@@ -157,7 +242,7 @@ export default function Home() {
                 <input
                   type="text"
                   value={bottomCaption}
-                  onChange={(e) => setBottomCaption(e.target.value)}
+                  onChange={(e) => handleBottomCaptionChange(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 font-bold uppercase"
                   placeholder={isSpeech ? 'Reaction or context...' : 'BOTTOM TEXT'}
                 />
@@ -170,6 +255,7 @@ export default function Home() {
             template={selectedTemplate}
             stickers={stickers}
             onUpdateStickers={setStickers}
+            onStickerActionComplete={handleStickerActionComplete}
             topCaption={topCaption}
             bottomCaption={bottomCaption}
           />
@@ -192,10 +278,28 @@ export default function Home() {
               {copied ? '✓ Copied!' : '📋 Copy Image'}
             </button>
             <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (⌘Z)"
+              className="px-3 py-2.5 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-sm hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              ↩ Undo
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (⌘Y)"
+              className="px-3 py-2.5 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-sm hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              ↪ Redo
+            </button>
+            <button
               onClick={() => {
+                const entry = { stickers: [], topCaption: '', bottomCaption: '' }
                 setStickers([])
                 setTopCaption('')
                 setBottomCaption('')
+                pushHistory(entry)
               }}
               className="px-4 py-2.5 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-sm hover:bg-white/10 transition-colors"
             >

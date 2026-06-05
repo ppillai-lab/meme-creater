@@ -15,6 +15,7 @@ interface MemeCanvasProps {
   template: MemeTemplate
   stickers: StickerElement[]
   onUpdateStickers: (stickers: StickerElement[]) => void
+  onStickerActionComplete?: (stickers: StickerElement[]) => void
   topCaption: string
   bottomCaption: string
 }
@@ -341,7 +342,7 @@ function drawTemplate(
 }
 
 export default forwardRef<{ download: () => void }, MemeCanvasProps>(
-  function MemeCanvas({ template, stickers, onUpdateStickers, topCaption, bottomCaption }, ref) {
+  function MemeCanvas({ template, stickers, onUpdateStickers, onStickerActionComplete, topCaption, bottomCaption }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null)
@@ -441,7 +442,9 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
       if (selectedId) {
         const sel = stickers.find((s) => s.id === selectedId)
         if (sel && hitTestDeleteHandle(pos.x, pos.y, sel)) {
-          onUpdateStickers(stickers.filter((s) => s.id !== selectedId))
+          const filtered = stickers.filter((s) => s.id !== selectedId)
+          onUpdateStickers(filtered)
+          onStickerActionComplete?.(filtered)
           setSelectedId(null)
           return
         }
@@ -490,6 +493,9 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
     }
 
     const handleMouseUp = () => {
+      if (dragging || resizing) {
+        onStickerActionComplete?.(stickers)
+      }
       setDragging(null)
       setResizing(null)
     }
@@ -498,7 +504,9 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
       const pos = getCanvasPos(e)
       const hitId = hitTestSticker(pos.x, pos.y)
       if (hitId) {
-        onUpdateStickers(stickers.map((s) => s.id === hitId ? { ...s, flipX: !s.flipX } : s))
+        const mapped = stickers.map((s) => s.id === hitId ? { ...s, flipX: !s.flipX } : s)
+        onUpdateStickers(mapped)
+        onStickerActionComplete?.(mapped)
       }
     }
 
