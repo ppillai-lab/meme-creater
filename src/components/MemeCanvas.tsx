@@ -178,7 +178,8 @@ function drawImpactText(
 function drawCharacterSticker(
   ctx: CanvasRenderingContext2D,
   sticker: StickerElement,
-  isSelected: boolean
+  isSelected: boolean,
+  photoCache: Map<string, HTMLImageElement | null>
 ) {
   const char = getCharacterById(sticker.characterId)
   if (!char) return
@@ -187,47 +188,72 @@ function drawCharacterSticker(
   const halfSize = size / 2
 
   ctx.save()
-
   if (sticker.flipX) {
     ctx.translate(x, y)
     ctx.scale(-1, 1)
     ctx.translate(-x, -y)
   }
 
-  // Draw background circle
-  const gradient = ctx.createRadialGradient(x, y, 0, x, y, halfSize)
-  const [c1, c2] = char.bgGradient.includes('#')
-    ? [char.partyColor, char.partyColor + 'aa']
-    : [char.partyColor, char.partyColor + 'aa']
-  gradient.addColorStop(0, c1)
-  gradient.addColorStop(1, c2)
+  const photo = char.photoUrl ? (photoCache.get(sticker.characterId) ?? null) : null
 
-  ctx.beginPath()
-  ctx.arc(x, y, halfSize, 0, Math.PI * 2)
-  ctx.fillStyle = gradient
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(255,255,255,0.3)'
-  ctx.lineWidth = 2
-  ctx.stroke()
+  if (photo) {
+    // Circular photo crop
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(x, y, halfSize, 0, Math.PI * 2)
+    ctx.clip()
 
-  // Draw emoji
-  ctx.font = `${size * 0.5}px serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(char.emoji, x, y - size * 0.05)
+    // Cover-fit: crop photo to square from center
+    const natW = photo.naturalWidth
+    const natH = photo.naturalHeight
+    let sx = 0, sy = 0, sw = natW, sh = natH
+    if (natW > natH) { sw = natH; sx = (natW - natH) / 2 }
+    else { sh = natW; sy = (natH - natW) / 2 }
+    ctx.drawImage(photo, sx, sy, sw, sh, x - halfSize, y - halfSize, size, size)
+    ctx.restore()
 
-  // Draw name label
-  ctx.font = `bold ${size * 0.13}px Arial, sans-serif`
+    // Colored party ring
+    ctx.beginPath()
+    ctx.arc(x, y, halfSize, 0, Math.PI * 2)
+    ctx.strokeStyle = char.partyColor
+    ctx.lineWidth = 4
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(x, y, halfSize - 4, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+  } else {
+    // Fallback: emoji circle
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, halfSize)
+    gradient.addColorStop(0, char.partyColor)
+    gradient.addColorStop(1, char.partyColor + 'aa')
+    ctx.beginPath()
+    ctx.arc(x, y, halfSize, 0, Math.PI * 2)
+    ctx.fillStyle = gradient
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.font = `${size * 0.5}px serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(char.emoji, x, y - size * 0.05)
+  }
+
+  // Name label
+  const labelFontSize = Math.max(10, size * 0.13)
+  ctx.font = `bold ${labelFontSize}px Arial, sans-serif`
   ctx.textBaseline = 'alphabetic'
+  ctx.textAlign = 'center'
   ctx.fillStyle = '#ffffff'
   ctx.strokeStyle = '#000000'
   ctx.lineWidth = 2
-  ctx.textAlign = 'center'
   ctx.strokeText(char.displayName.toUpperCase(), x, y + halfSize + size * 0.15)
   ctx.fillText(char.displayName.toUpperCase(), x, y + halfSize + size * 0.15)
 
   // Party badge
-  ctx.font = `${size * 0.1}px Arial, sans-serif`
+  ctx.font = `bold ${Math.max(8, size * 0.1)}px Arial, sans-serif`
   ctx.fillStyle = char.partyColor
   ctx.strokeStyle = '#000'
   ctx.lineWidth = 1.5
@@ -236,7 +262,7 @@ function drawCharacterSticker(
 
   ctx.restore()
 
-  // Selection indicator
+  // Selection indicator (outside flipX transform)
   if (isSelected) {
     ctx.save()
     ctx.setLineDash([5, 5])
@@ -247,12 +273,10 @@ function drawCharacterSticker(
     ctx.stroke()
     ctx.restore()
 
-    // Resize handle
     ctx.fillStyle = '#fbbf24'
     ctx.beginPath()
     ctx.arc(x + halfSize, y - halfSize, 6, 0, Math.PI * 2)
     ctx.fill()
-    // Delete handle
     ctx.fillStyle = '#ef4444'
     ctx.beginPath()
     ctx.arc(x - halfSize, y - halfSize, 6, 0, Math.PI * 2)
@@ -347,6 +371,34 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null)
     const [resizing, setResizing] = useState<{ id: string; startSize: number; startDist: number } | null>(null)
+    const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null)
+    const photoCacheRef = useRef<Map<string, HTMLImageElement | null>>(new Map())
+    const [photoVersion, setPhotoVersion] = useState(0)
+
+    useEffect(() => {
+      if (!template.imageUrl) { setBgImage(null); return }
+      const img = new Image()
+      img.onload = () => setBgImage(img)
+      img.onerror = () => setBgImage(null)
+      img.src = template.imageUrl
+    }, [template.imageUrl])
+
+    // Load character photos into cache as stickers are added
+    useEffect(() => {
+      stickers.forEach((sticker) => {
+        const char = getCharacterById(sticker.characterId)
+        if (!char?.photoUrl) return
+        if (photoCacheRef.current.has(sticker.characterId)) return
+        photoCacheRef.current.set(sticker.characterId, null) // loading sentinel
+        const img = new Image()
+        img.onload = () => {
+          photoCacheRef.current.set(sticker.characterId, img)
+          setPhotoVersion((v) => v + 1)
+        }
+        img.onerror = () => photoCacheRef.current.delete(sticker.characterId)
+        img.src = char.photoUrl
+      })
+    }, [stickers])
 
     const render = useCallback(() => {
       const canvas = canvasRef.current
@@ -355,11 +407,31 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
       if (!ctx) return
 
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H)
-      drawTemplate(ctx, template, CANVAS_W, CANVAS_H)
+
+      if (template.imageUrl && bgImage) {
+        // Cover-fit: fill canvas, crop center
+        const ia = bgImage.naturalWidth / bgImage.naturalHeight
+        const ca = CANVAS_W / CANVAS_H
+        let sx = 0, sy = 0, sw = bgImage.naturalWidth, sh = bgImage.naturalHeight
+        if (ia > ca) { sw = sh * ca; sx = (bgImage.naturalWidth - sw) / 2 }
+        else { sh = sw / ca; sy = (bgImage.naturalHeight - sh) / 2 }
+        ctx.drawImage(bgImage, sx, sy, sw, sh, 0, 0, CANVAS_W, CANVAS_H)
+      } else if (template.imageUrl && !bgImage) {
+        // Image still loading — draw placeholder
+        ctx.fillStyle = template.bgColor
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+        ctx.fillStyle = 'rgba(255,255,255,0.2)'
+        ctx.font = '16px Arial'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('Loading image…', CANVAS_W / 2, CANVAS_H / 2)
+      } else {
+        drawTemplate(ctx, template, CANVAS_W, CANVAS_H)
+      }
 
       // Draw stickers (bottom-most first)
       stickers.forEach((sticker) => {
-        drawCharacterSticker(ctx, sticker, sticker.id === selectedId)
+        drawCharacterSticker(ctx, sticker, sticker.id === selectedId, photoCacheRef.current)
       })
 
       // Draw captions
@@ -396,7 +468,7 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
           }
         }
       }
-    }, [template, stickers, selectedId, topCaption, bottomCaption])
+    }, [template, stickers, selectedId, topCaption, bottomCaption, bgImage, photoVersion])
 
     useEffect(() => {
       render()

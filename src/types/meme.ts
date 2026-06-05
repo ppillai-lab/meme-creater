@@ -10,6 +10,7 @@ export interface Character {
   bgGradient: string
   textColor: string
   category: 'politician' | 'comedian' | 'celebrity'
+  photoUrl?: string
 }
 
 export interface MemeTemplate {
@@ -21,6 +22,7 @@ export interface MemeTemplate {
   textColor: string
   layout: 'classic' | 'two-panel' | 'breaking-news' | 'blank' | 'compare' | 'speech'
   previewEmoji: string
+  imageUrl?: string
 }
 
 export interface TextElement {

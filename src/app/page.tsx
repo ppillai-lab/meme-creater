@@ -6,7 +6,7 @@ import CharacterPanel from '@/components/CharacterPanel'
 import TemplatePanel from '@/components/TemplatePanel'
 import AICaption from '@/components/AICaption'
 import TrendingPanel from '@/components/TrendingPanel'
-import { memeTemplates } from '@/data/templates'
+import { memeTemplates, getTemplateById } from '@/data/templates'
 import { characters } from '@/data/characters'
 import type { StickerElement, TrendingTopic, TrendingTopicContext } from '@/types/meme'
 
@@ -152,6 +152,34 @@ export default function Home() {
     }
   }
 
+  const handleAutoCreate = (recipe: {
+    template_id: string
+    character_ids: string[]
+    top_caption: string
+    bottom_caption: string
+  }) => {
+    // Switch template
+    const tpl = getTemplateById(recipe.template_id)
+    if (tpl) setSelectedTemplate(tpl)
+
+    // Build stickers for returned characters
+    const isSpeech = (tpl ?? selectedTemplate).layout === 'speech'
+    const newStickers: StickerElement[] = recipe.character_ids.map((cid, i) => ({
+      id: `sticker-${Date.now()}-${i}`,
+      characterId: cid,
+      x: recipe.character_ids.length === 1 ? 350 : i === 0 ? 180 : 520,
+      y: isSpeech ? 370 : 300,
+      size: 110,
+      flipX: false,
+    }))
+
+    setStickers(newStickers)
+    setTopCaption(recipe.top_caption)
+    setBottomCaption(recipe.bottom_caption)
+    pushHistory({ stickers: newStickers, topCaption: recipe.top_caption, bottomCaption: recipe.bottom_caption })
+    setSidebarOpen(false)
+  }
+
   const selectedCharacterIds = Array.from(new Set(stickers.map((s) => s.characterId)))
   const isSpeech = selectedTemplate.layout === 'speech'
 
@@ -233,6 +261,7 @@ export default function Home() {
               <AICaption
                 characterIds={selectedCharacterIds}
                 onApplyCaption={applyCaption}
+                onAutoCreate={handleAutoCreate}
                 topic={topic}
                 onTopicChange={setTopic}
                 trendingContext={trendingContext}

@@ -4,9 +4,18 @@ import { useState } from 'react'
 import { characters } from '@/data/characters'
 import type { TrendingTopicContext } from '@/types/meme'
 
+interface AutoMemeRecipe {
+  template_id: string
+  character_ids: string[]
+  top_caption: string
+  bottom_caption: string
+  explanation: string
+}
+
 interface AICaptionProps {
   characterIds: string[]
   onApplyCaption: (top: string, bottom: string) => void
+  onAutoCreate?: (recipe: AutoMemeRecipe) => void
   topic: string
   onTopicChange: (t: string) => void
   trendingContext?: TrendingTopicContext | null
@@ -25,12 +34,14 @@ const LANGUAGES = [
   { value: 'tamil', label: 'தமிழ்' },
 ] as const
 
-export default function AICaption({ characterIds, onApplyCaption, topic, onTopicChange, trendingContext }: AICaptionProps) {
+export default function AICaption({ characterIds, onApplyCaption, onAutoCreate, topic, onTopicChange, trendingContext }: AICaptionProps) {
   const [language, setLanguage] = useState<'english' | 'tanglish' | 'tamil'>('english')
   const [style, setStyle] = useState<string>('sarcastic')
   const [loading, setLoading] = useState(false)
+  const [autoCreating, setAutoCreating] = useState(false)
   const [captions, setCaptions] = useState<CaptionOption[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [lastRecipe, setLastRecipe] = useState<AutoMemeRecipe | null>(null)
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(characterIds)
 
   const allPoliticians = characters.filter((c) => c.category === 'politician')
@@ -74,10 +85,64 @@ export default function AICaption({ characterIds, onApplyCaption, topic, onTopic
     }
   }
 
+  const autoCreate = async () => {
+    setAutoCreating(true)
+    setError(null)
+    setLastRecipe(null)
+    try {
+      const res = await fetch('/api/generate-meme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trendingContext: trendingContext ?? undefined, topic, language }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setError(data.error || 'Failed to auto-create meme.')
+      } else {
+        setLastRecipe(data)
+        onAutoCreate?.(data)
+      }
+    } catch {
+      setError('Network error. Check your API key and connection.')
+    } finally {
+      setAutoCreating(false)
+    }
+  }
+
   return (
     <div className="p-3">
+      {/* Auto-Create Full Meme — one-click AI */}
+      <div className="mb-4 p-3 rounded-xl border border-orange-500/30 bg-orange-500/5">
+        <div className="text-xs font-bold text-orange-400 mb-1">🎯 Auto-Create Full Meme</div>
+        <p className="text-xs text-gray-500 mb-2 leading-relaxed">
+          AI picks the template, characters, and captions — one click.
+          {trendingContext && <span className="text-orange-400"> Using trending topic.</span>}
+        </p>
+        <button
+          onClick={autoCreate}
+          disabled={autoCreating}
+          className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
+            autoCreating
+              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600 shadow-lg shadow-orange-500/20'
+          }`}
+        >
+          {autoCreating ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="ai-loading inline-block w-3 h-3 rounded-full border-2 border-white/30 border-t-white" />
+              Creating full meme...
+            </span>
+          ) : (
+            '🎯 One-Click Full Meme'
+          )}
+        </button>
+        {lastRecipe && (
+          <div className="mt-2 text-xs text-gray-500 italic">{lastRecipe.explanation}</div>
+        )}
+      </div>
+
       <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-        AI generates satirical captions based on real political events.
+        Or manually generate captions only:
       </p>
 
       {/* Character selection */}
