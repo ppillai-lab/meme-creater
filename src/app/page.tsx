@@ -5,9 +5,10 @@ import MemeCanvas from '@/components/MemeCanvas'
 import CharacterPanel from '@/components/CharacterPanel'
 import TemplatePanel from '@/components/TemplatePanel'
 import AICaption from '@/components/AICaption'
+import TrendingPanel from '@/components/TrendingPanel'
 import { memeTemplates } from '@/data/templates'
 import { characters } from '@/data/characters'
-import type { StickerElement } from '@/types/meme'
+import type { StickerElement, TrendingTopic, TrendingTopicContext } from '@/types/meme'
 
 export default function Home() {
   const [selectedTemplate, setSelectedTemplate] = useState(memeTemplates[0])
@@ -15,14 +16,17 @@ export default function Home() {
   const [topCaption, setTopCaption] = useState('WHEN THE GOVERNMENT SAYS')
   const [bottomCaption, setBottomCaption] = useState('"ACHHE DIN" INCOMING...')
   const [activeTab, setActiveTab] = useState<'characters' | 'templates' | 'ai'>('characters')
+  const [topic, setTopic] = useState('')
+  const [trendingContext, setTrendingContext] = useState<TrendingTopicContext | null>(null)
   const canvasRef = useRef<{ download: () => void }>(null)
 
   const addSticker = (characterId: string) => {
+    const isSpeechTemplate = selectedTemplate.layout === 'speech'
     const newSticker: StickerElement = {
       id: `sticker-${Date.now()}`,
       characterId,
-      x: 100 + Math.random() * 300,
-      y: 80 + Math.random() * 200,
+      x: 150 + Math.random() * 300,
+      y: isSpeechTemplate ? 330 + Math.random() * 100 : 80 + Math.random() * 200,
       size: 100,
       flipX: false,
     }
@@ -38,7 +42,23 @@ export default function Home() {
     setBottomCaption(bottom)
   }
 
-  const selectedCharacterIds = [...new Set(stickers.map((s) => s.characterId))]
+  const handleSelectTrend = (trend: TrendingTopic) => {
+    setTopic(trend.title)
+    setTrendingContext({
+      title: trend.title,
+      summary: trend.summary,
+      satiricalAngle: trend.satiricalAngle,
+      tags: trend.tags,
+      publishedAt: trend.publishedAt,
+    })
+    setActiveTab('ai')
+    if (stickers.length === 0 && trend.characters.length > 0) {
+      addSticker(trend.characters[0])
+    }
+  }
+
+  const selectedCharacterIds = Array.from(new Set(stickers.map((s) => s.characterId)))
+  const isSpeech = selectedTemplate.layout === 'speech'
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white flex flex-col">
@@ -97,33 +117,40 @@ export default function Home() {
               <AICaption
                 characterIds={selectedCharacterIds}
                 onApplyCaption={applyCaption}
+                topic={topic}
+                onTopicChange={setTopic}
+                trendingContext={trendingContext}
               />
             )}
           </div>
         </div>
 
         {/* Main Canvas Area */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#0a0a0a]">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#0a0a0a] min-w-0">
           <div className="mb-4 w-full max-w-2xl">
             <div className="flex gap-3 mb-3">
               <div className="flex-1">
-                <label className="block text-xs text-gray-400 mb-1">TOP CAPTION</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  {isSpeech ? 'SPEECH TEXT' : 'TOP CAPTION'}
+                </label>
                 <input
                   type="text"
                   value={topCaption}
                   onChange={(e) => setTopCaption(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 font-bold uppercase"
-                  placeholder="TOP TEXT"
+                  placeholder={isSpeech ? 'What are they saying?' : 'TOP TEXT'}
                 />
               </div>
               <div className="flex-1">
-                <label className="block text-xs text-gray-400 mb-1">BOTTOM CAPTION</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  {isSpeech ? 'SUBTEXT / REACTION' : 'BOTTOM CAPTION'}
+                </label>
                 <input
                   type="text"
                   value={bottomCaption}
                   onChange={(e) => setBottomCaption(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500 font-bold uppercase"
-                  placeholder="BOTTOM TEXT"
+                  placeholder={isSpeech ? 'Reaction or context...' : 'BOTTOM TEXT'}
                 />
               </div>
             </div>
@@ -159,6 +186,10 @@ export default function Home() {
               {stickers.length} character{stickers.length !== 1 ? 's' : ''} on canvas
             </span>
           </div>
+        </div>
+        {/* Right Sidebar — Trending Panel */}
+        <div className="hidden xl:flex w-60 border-l border-white/10 flex-col bg-black/20 shrink-0">
+          <TrendingPanel onSelectTopic={handleSelectTrend} />
         </div>
       </div>
 

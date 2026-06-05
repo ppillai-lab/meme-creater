@@ -2,10 +2,14 @@
 
 import { useState } from 'react'
 import { characters } from '@/data/characters'
+import type { TrendingTopicContext } from '@/types/meme'
 
 interface AICaptionProps {
   characterIds: string[]
   onApplyCaption: (top: string, bottom: string) => void
+  topic: string
+  onTopicChange: (t: string) => void
+  trendingContext?: TrendingTopicContext | null
 }
 
 interface CaptionOption {
@@ -21,8 +25,7 @@ const LANGUAGES = [
   { value: 'tamil', label: 'தமிழ்' },
 ] as const
 
-export default function AICaption({ characterIds, onApplyCaption }: AICaptionProps) {
-  const [topic, setTopic] = useState('')
+export default function AICaption({ characterIds, onApplyCaption, topic, onTopicChange, trendingContext }: AICaptionProps) {
   const [language, setLanguage] = useState<'english' | 'tanglish' | 'tamil'>('english')
   const [style, setStyle] = useState<string>('sarcastic')
   const [loading, setLoading] = useState(false)
@@ -55,6 +58,7 @@ export default function AICaption({ characterIds, onApplyCaption }: AICaptionPro
           topic,
           language,
           style,
+          trendingContext: trendingContext ?? undefined,
         }),
       })
       const data = await res.json()
@@ -105,13 +109,20 @@ export default function AICaption({ characterIds, onApplyCaption }: AICaptionPro
 
       {/* Topic */}
       <div className="mb-3">
-        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
-          Topic / Angle (optional)
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+            Topic / Angle (optional)
+          </label>
+          {trendingContext && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              📡 trending
+            </span>
+          )}
+        </div>
         <input
           type="text"
           value={topic}
-          onChange={(e) => setTopic(e.target.value)}
+          onChange={(e) => onTopicChange(e.target.value)}
           placeholder="e.g. Electoral Bonds, NEET, Price rise..."
           className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 placeholder:text-gray-600"
         />

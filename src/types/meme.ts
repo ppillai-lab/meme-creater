@@ -57,3 +57,34 @@ export interface MemeState {
   canvasWidth: number
   canvasHeight: number
 }
+
+export interface TrendingTopic {
+  id: string
+  title: string
+  summary: string
+  source: string
+  sourceUrl: string
+  publishedAt: string
+  tags: string[]
+  characters: string[]
+  relevanceScore: number
+  satiricalAngle?: string
+  language: 'english' | 'tamil'
+  isEnriched: boolean
+}
+
+export interface TrendingResponse {
+  topics: TrendingTopic[]
+  fetchedAt: string
+  nextRefreshAt: string
+  sources: string[]
+  failedSources: string[]
+}
+
+export interface TrendingTopicContext {
+  title: string
+  summary: string
+  satiricalAngle?: string
+  tags: string[]
+  publishedAt: string
+}

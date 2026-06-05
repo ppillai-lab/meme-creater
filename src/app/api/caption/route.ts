@@ -2,12 +2,19 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import { characters } from '@/data/characters'
 import { currentEvents, getEventsByCharacters } from '@/data/events'
+import type { TrendingTopicContext } from '@/types/meme'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(req: NextRequest) {
   try {
-    const { characterIds, topic, language = 'english', style = 'sarcastic' } = await req.json()
+    const { characterIds, topic, language = 'english', style = 'sarcastic', trendingContext } = await req.json() as {
+      characterIds: string[]
+      topic?: string
+      language?: string
+      style?: string
+      trendingContext?: TrendingTopicContext
+    }
 
     const selectedChars = characters.filter((c) => characterIds.includes(c.id))
     const relevantEvents = getEventsByCharacters(characterIds)
@@ -45,6 +52,14 @@ OTHER RELEVANT CONTEXT:
 ${allEvents.slice(0, 3)}
 
 USER'S TOPIC/IDEA: ${topic || 'General political satire'}
+${trendingContext ? `
+LIVE TRENDING NEWS (make captions feel like breaking news responses):
+Title: ${trendingContext.title}
+Summary: ${trendingContext.summary}
+${trendingContext.satiricalAngle ? `Suggested satirical angle: ${trendingContext.satiricalAngle}` : ''}
+Tags: ${trendingContext.tags.join(', ')}
+Published: ${trendingContext.publishedAt}
+Incorporate this live context — make the meme feel topical and current.` : ''}
 
 LANGUAGE STYLE: ${language} (${language === 'tanglish' ? 'Mix Tamil and English like Tamil internet users do' : language === 'tamil' ? 'Pure Tamil script' : 'English with Tamil political context'})
 

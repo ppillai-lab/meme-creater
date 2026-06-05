@@ -22,6 +22,140 @@ interface MemeCanvasProps {
 const CANVAS_W = 700
 const CANVAS_H = 500
 
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number
+) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.arcTo(x + w, y, x + w, y + r, r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+  ctx.lineTo(x + r, y + h)
+  ctx.arcTo(x, y + h, x, y + h - r, r)
+  ctx.lineTo(x, y + r)
+  ctx.arcTo(x, y, x + r, y, r)
+  ctx.closePath()
+}
+
+function wrapTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const words = text.split(' ')
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line)
+      line = word
+      if (lines.length >= maxLines) break
+    } else {
+      line = test
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line)
+  return lines.slice(0, maxLines)
+}
+
+function drawSpeechBubble(
+  ctx: CanvasRenderingContext2D,
+  topText: string,
+  bottomText: string,
+  w: number,
+  h: number,
+  firstSticker?: StickerElement
+) {
+  const bx = 30
+  const by = 20
+  const bw = w - 60
+  const bh = 210
+  const br = 24
+
+  const speakerX = firstSticker ? firstSticker.x : w / 4
+  const speakerY = firstSticker
+    ? firstSticker.y - firstSticker.size / 2 - 10
+    : h - 100
+  const tailBaseX = Math.max(bx + br + 30, Math.min(bx + bw - br - 30, speakerX))
+  const tailBaseY = by + bh
+
+  // Shadow
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.18)'
+  ctx.shadowBlur = 18
+  ctx.shadowOffsetY = 5
+  ctx.fillStyle = '#ffffff'
+  roundedRect(ctx, bx, by, bw, bh, br)
+  ctx.fill()
+  ctx.restore()
+
+  // Border
+  ctx.strokeStyle = '#2c2c2c'
+  ctx.lineWidth = 3
+  roundedRect(ctx, bx, by, bw, bh, br)
+  ctx.stroke()
+
+  // Tail fill (covers bubble border at base)
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  ctx.moveTo(tailBaseX - 22, tailBaseY - 2)
+  ctx.lineTo(tailBaseX + 22, tailBaseY - 2)
+  ctx.lineTo(speakerX, speakerY)
+  ctx.closePath()
+  ctx.fill()
+
+  // Tail border lines (left and right sides only)
+  ctx.strokeStyle = '#2c2c2c'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(tailBaseX - 22, tailBaseY)
+  ctx.lineTo(speakerX, speakerY)
+  ctx.moveTo(tailBaseX + 22, tailBaseY)
+  ctx.lineTo(speakerX, speakerY)
+  ctx.stroke()
+
+  // Text inside bubble
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const textX = w / 2
+  const midY = by + bh / 2
+
+  if (!topText && !bottomText) {
+    ctx.font = 'italic 18px Arial, sans-serif'
+    ctx.fillStyle = 'rgba(0,0,0,0.2)'
+    ctx.fillText('Type caption above to fill bubble...', textX, midY)
+    return
+  }
+
+  if (topText && bottomText) {
+    ctx.font = 'bold 30px Impact, Arial Black, sans-serif'
+    ctx.fillStyle = '#1a1a1a'
+    const topLines = wrapTextLines(ctx, topText.toUpperCase(), bw - 60, 2)
+    const topTotalH = (topLines.length - 1) * 36
+    const topStartY = midY - 34 - topTotalH / 2
+    topLines.forEach((l, i) => ctx.fillText(l, textX, topStartY + i * 36))
+
+    ctx.font = 'bold 22px Impact, Arial Black, sans-serif'
+    ctx.fillStyle = '#555555'
+    const botLines = wrapTextLines(ctx, bottomText.toUpperCase(), bw - 60, 2)
+    const botTotalH = (botLines.length - 1) * 28
+    const botStartY = midY + 50 - botTotalH / 2
+    botLines.forEach((l, i) => ctx.fillText(l, textX, botStartY + i * 28))
+  } else {
+    const text = topText || bottomText
+    ctx.font = 'bold 32px Impact, Arial Black, sans-serif'
+    ctx.fillStyle = '#1a1a1a'
+    const lines = wrapTextLines(ctx, text.toUpperCase(), bw - 60, 3)
+    const totalH = (lines.length - 1) * 40
+    const startY = midY - totalH / 2
+    lines.forEach((l, i) => ctx.fillText(l, textX, startY + i * 40))
+  }
+}
+
 function drawImpactText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -140,8 +274,8 @@ function drawTemplate(
     const parts = template.bgGradient.match(/#[a-fA-F0-9]{6}/g) || []
     if (parts.length >= 2) {
       const grad = ctx.createLinearGradient(0, 0, w, h)
-      grad.addColorStop(0, parts[0])
-      grad.addColorStop(1, parts[1])
+      grad.addColorStop(0, parts[0] ?? template.bgColor)
+      grad.addColorStop(1, parts[1] ?? template.bgColor)
       ctx.fillStyle = grad
     } else {
       ctx.fillStyle = template.bgColor
@@ -228,14 +362,37 @@ export default forwardRef<{ download: () => void }, MemeCanvasProps>(
       })
 
       // Draw captions
-      if (topCaption) {
-        drawImpactText(ctx, topCaption, CANVAS_W / 2, 45, CANVAS_W - 40, template.textColor)
-      }
-      if (bottomCaption) {
-        if (template.layout === 'breaking-news') {
-          drawImpactText(ctx, bottomCaption, CANVAS_W / 2, CANVAS_H - 82, CANVAS_W - 40, '#FFD700')
-        } else {
-          drawImpactText(ctx, bottomCaption, CANVAS_W / 2, CANVAS_H - 20, CANVAS_W - 40, template.textColor)
+      if (template.layout === 'speech') {
+        if (stickers.length === 0) {
+          const gx = CANVAS_W / 2
+          const gy = CANVAS_H - 90
+          ctx.save()
+          ctx.setLineDash([8, 6])
+          ctx.strokeStyle = 'rgba(0,0,0,0.18)'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.arc(gx, gy, 60, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.fillStyle = 'rgba(0,0,0,0.18)'
+          ctx.font = 'bold 11px Arial, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText('ADD CHARACTER', gx, gy - 7)
+          ctx.fillText('FROM LEFT PANEL', gx, gy + 9)
+          ctx.restore()
+        }
+        drawSpeechBubble(ctx, topCaption, bottomCaption, CANVAS_W, CANVAS_H, stickers[0])
+      } else {
+        if (topCaption) {
+          drawImpactText(ctx, topCaption, CANVAS_W / 2, 45, CANVAS_W - 40, template.textColor)
+        }
+        if (bottomCaption) {
+          if (template.layout === 'breaking-news') {
+            drawImpactText(ctx, bottomCaption, CANVAS_W / 2, CANVAS_H - 82, CANVAS_W - 40, '#FFD700')
+          } else {
+            drawImpactText(ctx, bottomCaption, CANVAS_W / 2, CANVAS_H - 20, CANVAS_W - 40, template.textColor)
+          }
         }
       }
     }, [template, stickers, selectedId, topCaption, bottomCaption])
