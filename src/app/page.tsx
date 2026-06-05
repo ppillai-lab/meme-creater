@@ -18,6 +18,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'characters' | 'templates' | 'ai'>('characters')
   const [topic, setTopic] = useState('')
   const [trendingContext, setTrendingContext] = useState<TrendingTopicContext | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const canvasRef = useRef<{ download: () => void; copyToClipboard: () => Promise<boolean> }>(null)
   const [copied, setCopied] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
@@ -157,23 +158,44 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white flex flex-col">
       {/* Header */}
-      <header className="border-b border-white/10 px-6 py-3 flex items-center justify-between bg-black/40">
+      <header className="border-b border-white/10 px-4 sm:px-6 py-3 flex items-center justify-between bg-black/40 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-sm font-bold">M</div>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-sm font-bold shrink-0">M</div>
           <div>
             <h1 className="text-lg font-bold text-white">Meme Creater</h1>
-            <p className="text-xs text-gray-400">Tamil Political Satire Studio</p>
+            <p className="hidden sm:block text-xs text-gray-400">Tamil Political Satire Studio</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className="px-2 py-1 bg-white/5 rounded border border-white/10">SATIRE</span>
-          <span className="px-2 py-1 bg-white/5 rounded border border-white/10">POLITICAL COMMENTARY</span>
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
+            <span className="px-2 py-1 bg-white/5 rounded border border-white/10">SATIRE</span>
+            <span className="px-2 py-1 bg-white/5 rounded border border-white/10">POLITICAL COMMENTARY</span>
+          </div>
+          <button
+            onClick={() => setSidebarOpen((v) => !v)}
+            className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded text-xs text-gray-300 hover:text-white transition-colors"
+          >
+            {sidebarOpen ? '✕ Close' : '☰ Panels'}
+          </button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar */}
-        <div className="w-72 border-r border-white/10 flex flex-col bg-black/20">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Mobile overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/60 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Left Sidebar — drawer on mobile, static on desktop */}
+        <div className={`
+          fixed inset-y-0 left-0 z-50 w-72 shrink-0 flex flex-col bg-[#0d0d0d] border-r border-white/10
+          transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:relative md:translate-x-0 md:z-auto md:bg-black/20
+        `}>
           {/* Tabs */}
           <div className="flex border-b border-white/10">
             {(['characters', 'templates', 'ai'] as const).map((tab) => (
@@ -220,9 +242,9 @@ export default function Home() {
         </div>
 
         {/* Main Canvas Area */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#0a0a0a] min-w-0">
-          <div className="mb-4 w-full max-w-2xl">
-            <div className="flex gap-3 mb-3">
+        <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 bg-[#0a0a0a] min-w-0 overflow-y-auto">
+          <div className="mb-3 sm:mb-4 w-full max-w-2xl">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-3">
               <div className="flex-1">
                 <label className="block text-xs text-gray-400 mb-1">
                   {isSpeech ? 'SPEECH TEXT' : 'TOP CAPTION'}
@@ -260,22 +282,22 @@ export default function Home() {
             bottomCaption={bottomCaption}
           />
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-3 sm:mt-4 flex flex-wrap items-center gap-2 justify-center sm:justify-start">
             <button
               onClick={() => canvasRef.current?.download()}
-              className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all text-sm"
+              className="px-4 sm:px-6 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all text-sm"
             >
-              ⬇ Download Meme
+              ⬇ <span className="hidden sm:inline">Download </span>Meme
             </button>
             <button
               onClick={handleCopy}
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 copied
                   ? 'bg-green-600 text-white'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
               }`}
             >
-              {copied ? '✓ Copied!' : '📋 Copy Image'}
+              {copied ? '✓ Copied!' : '📋 Copy'}
             </button>
             <button
               onClick={undo}
@@ -301,11 +323,11 @@ export default function Home() {
                 setBottomCaption('')
                 pushHistory(entry)
               }}
-              className="px-4 py-2.5 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-sm hover:bg-white/10 transition-colors"
+              className="px-3 sm:px-4 py-2.5 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-sm hover:bg-white/10 transition-colors"
             >
               🗑 Clear
             </button>
-            <span className="text-xs text-gray-600">
+            <span className="text-xs text-gray-600 w-full sm:w-auto text-center sm:text-left">
               {stickers.length} character{stickers.length !== 1 ? 's' : ''} on canvas
             </span>
           </div>
